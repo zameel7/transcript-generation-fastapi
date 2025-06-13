@@ -1,0 +1,21 @@
+# FastAPI Whisper AI Transcription Service Requirements
+# Latest versions as of June 2025
+
+# Core web framework and server
+fastapi==0.115.12
+uvicorn[standard]==0.34.3
+
+# AI/ML dependencies
+# Install from Git repository for Python 3.13 compatibility
+# openai-whisper==20240930
+git+https://github.com/openai/whisper.git
+
+# File handling for multipart uploads
+python-multipart>=0.0.18
+
+# Optional: for better performance if needed
+setuptools-rust
+
+# Development dependencies (optional)
+# pytest
+# httpx  # for testing 
