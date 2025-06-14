@@ -13,6 +13,9 @@ git+https://github.com/openai/whisper.git
 # File handling for multipart uploads
 python-multipart>=0.0.18
 
+# HTTP requests for URL downloads
+requests>=2.31.0
+
 # Optional: for better performance if needed
 setuptools-rust
 

@@ -93,6 +93,8 @@ The service will be available at:
 - **POST** `/transcribe/` - Transcribe an audio or video file (universal endpoint)
 - **POST** `/transcribe/audio/` - Legacy audio-only endpoint (redirects to main)
 - **POST** `/transcribe/video/` - Explicit video transcription endpoint
+- **POST** `/transcribe/url/` - Transcribe from URL (JSON request body)
+- **POST** `/transcribe/from-url/` - Transcribe from URL (query parameter)
 
 ### Administration
 - **POST** `/admin/preload-model/` - Pre-download and cache a model
@@ -123,17 +125,62 @@ curl -X POST "http://localhost:8000/transcribe/video/" \
      -F "video_file=@your_video_file.mp4"
 ```
 
-Using Python requests:
+**NEW: Transcribing from URLs**
+
+Using JSON request body:
+```bash
+curl -X POST "http://localhost:8000/transcribe/url/" \
+     -H "accept: application/json" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "url": "https://example.com/path/to/video.mp4",
+       "max_file_size_mb": 500
+     }'
+```
+
+Using query parameter (simpler):
+```bash
+curl -X POST "http://localhost:8000/transcribe/from-url/?url=https://example.com/path/to/video.mp4" \
+     -H "accept: application/json"
+```
+
+Using Python requests for file upload:
 ```python
 import requests
 
 url = "http://localhost:8000/transcribe/"
-files = {"audio_file": open("audio.mp3", "rb")}
+files = {"media_file": open("audio.mp3", "rb")}
 response = requests.post(url, files=files)
 result = response.json()
 
 print(f"Transcribed text: {result['text']}")
 print(f"Detected language: {result['language']}")
+print(f"Source: {result['source']}")  # 'upload'
+```
+
+Using Python requests for URL transcription:
+```python
+import requests
+
+# Method 1: JSON request body
+url = "http://localhost:8000/transcribe/url/"
+data = {
+    "url": "https://example.com/path/to/video.mp4",
+    "max_file_size_mb": 500
+}
+response = requests.post(url, json=data)
+result = response.json()
+
+# Method 2: Query parameter
+url = "http://localhost:8000/transcribe/from-url/"
+params = {"url": "https://example.com/path/to/video.mp4"}
+response = requests.post(url, params=params)
+result = response.json()
+
+print(f"Transcribed text: {result['text']}")
+print(f"Detected language: {result['language']}")
+print(f"File type: {result['file_type']}")  # 'video' or 'audio'
+print(f"Source: {result['source']}")  # 'url'
 ```
 
 #### Response Format
@@ -142,7 +189,8 @@ print(f"Detected language: {result['language']}")
   "text": "Transcribed text content here...",
   "language": "en",
   "confidence": -0.234,
-  "file_type": "video"
+  "file_type": "video",
+  "source": "url"
 }
 ```
 
@@ -170,6 +218,26 @@ The API now natively supports video files! Here's what you need to know:
 - **No preprocessing needed**: Upload video files directly to any transcription endpoint
 - **Supported formats**: MP4, AVI, MOV, MKV, WebM, M4V, 3GP, FLV, WMV
 - **Larger file limits**: Video files can be up to 500MB (vs 100MB for audio)
+
+### URL-Based Transcription
+**NEW FEATURE**: Transcribe audio/video files directly from URLs without downloading them first!
+
+**Features:**
+- **Direct URL processing**: No need to download files manually
+- **Automatic file type detection**: Supports both audio and video URLs
+- **Size validation**: Configurable file size limits (default: 500MB)
+- **Smart filename detection**: Automatically detects filenames from URLs or headers
+- **Secure downloads**: Streaming download with size checks to prevent abuse
+
+**Supported URL sources:**
+- Direct media file URLs (e.g., `https://example.com/video.mp4`)
+- Cloud storage links (Google Drive, Dropbox, etc.)
+- CDN-hosted media files
+- Any publicly accessible audio/video URL
+
+**Two endpoint options:**
+1. **`/transcribe/url/`** - JSON request body with advanced options
+2. **`/transcribe/from-url/`** - Simple query parameter approach
 
 ### Model Pre-downloading
 To avoid downloading models on first startup, use the pre-loading utility:

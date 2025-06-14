@@ -8,13 +8,16 @@ resource isolation and asynchronous processing capabilities.
 """
 
 import whisper
-from fastapi import FastAPI, File, UploadFile, HTTPException
-from pydantic import BaseModel
+from fastapi import FastAPI, File, UploadFile, HTTPException, Query
+from pydantic import BaseModel, HttpUrl
 import os
 import shutil
 import tempfile
 import logging
+import requests
+import urllib.parse
 from pathlib import Path
+from typing import Optional
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -83,11 +86,16 @@ class TranscriptionResponse(BaseModel):
     language: str
     confidence: float = None
     file_type: str = None  # 'audio' or 'video'
+    source: str = None  # 'upload' or 'url'
     
 class HealthResponse(BaseModel):
     status: str
     message: str
     model_info: dict = None
+
+class UrlTranscriptionRequest(BaseModel):
+    url: HttpUrl
+    max_file_size_mb: Optional[int] = 500  # Default max size in MB
 
 @app.get("/", response_model=HealthResponse)
 async def root():
@@ -131,6 +139,97 @@ def get_file_type(filename: str) -> str:
         return "video"
     else:
         return "unknown"
+
+def download_file_from_url(url: str, max_size_bytes: int = 500 * 1024 * 1024) -> tuple[str, str]:
+    """
+    Download a file from URL to a temporary location.
+    
+    Args:
+        url: The URL to download from
+        max_size_bytes: Maximum file size in bytes
+        
+    Returns:
+        tuple: (temp_file_path, original_filename)
+        
+    Raises:
+        HTTPException: If download fails or file is too large
+    """
+    try:
+        # Parse URL to get filename
+        parsed_url = urllib.parse.urlparse(url)
+        original_filename = os.path.basename(parsed_url.path)
+        
+        # If no filename in URL, try to get from Content-Disposition header
+        if not original_filename or '.' not in original_filename:
+            try:
+                head_response = requests.head(url, timeout=10, allow_redirects=True)
+                content_disposition = head_response.headers.get('content-disposition', '')
+                if 'filename=' in content_disposition:
+                    original_filename = content_disposition.split('filename=')[1].strip('"')
+                else:
+                    # Fallback to content-type
+                    content_type = head_response.headers.get('content-type', '')
+                    if 'video' in content_type:
+                        original_filename = 'video_file.mp4'
+                    elif 'audio' in content_type:
+                        original_filename = 'audio_file.mp3'
+                    else:
+                        original_filename = 'media_file'
+            except:
+                original_filename = 'media_file'
+        
+        # Ensure filename has an extension
+        if '.' not in original_filename:
+            original_filename += '.mp4'  # Default to mp4
+            
+        logger.info(f"Downloading file from URL: {url}")
+        logger.info(f"Detected filename: {original_filename}")
+        
+        # Start download with streaming
+        response = requests.get(url, stream=True, timeout=30)
+        response.raise_for_status()
+        
+        # Check content length if available
+        content_length = response.headers.get('content-length')
+        if content_length and int(content_length) > max_size_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large. Maximum size is {max_size_bytes // (1024*1024)}MB."
+            )
+        
+        # Create temporary file with appropriate extension
+        file_ext = Path(original_filename).suffix
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=file_ext)
+        temp_file_path = temp_file.name
+        
+        # Download with size checking
+        downloaded_size = 0
+        chunk_size = 8192
+        
+        with temp_file:
+            for chunk in response.iter_content(chunk_size=chunk_size):
+                if chunk:
+                    downloaded_size += len(chunk)
+                    if downloaded_size > max_size_bytes:
+                        temp_file.close()
+                        os.unlink(temp_file_path)
+                        raise HTTPException(
+                            status_code=413,
+                            detail=f"File too large. Maximum size is {max_size_bytes // (1024*1024)}MB."
+                        )
+                    temp_file.write(chunk)
+        
+        logger.info(f"Downloaded {downloaded_size} bytes to {temp_file_path}")
+        return temp_file_path, original_filename
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Failed to download file from URL {url}: {e}")
+        raise HTTPException(status_code=400, detail=f"Failed to download file: {str(e)}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error downloading from URL {url}: {e}")
+        raise HTTPException(status_code=500, detail=f"Download failed: {str(e)}")
 
 @app.post("/transcribe/", response_model=TranscriptionResponse)
 async def transcribe_media(media_file: UploadFile = File(...)):
@@ -213,7 +312,8 @@ async def transcribe_media(media_file: UploadFile = File(...)):
             text=transcribed_text,
             language=detected_language,
             confidence=confidence,
-            file_type=file_type
+            file_type=file_type,
+            source="upload"
         )
         
     except HTTPException:
@@ -260,6 +360,91 @@ async def transcribe_video(video_file: UploadFile = File(...)):
         )
     
     return await transcribe_media(video_file)
+
+# URL-based transcription endpoints
+@app.post("/transcribe/url/", response_model=TranscriptionResponse)
+async def transcribe_from_url(request: UrlTranscriptionRequest):
+    """
+    Transcribes audio/video from a URL by downloading it first.
+    
+    Args:
+        request: Contains the URL and optional parameters
+        
+    Returns:
+        TranscriptionResponse containing the transcribed text
+    """
+    if model is None:
+        raise HTTPException(status_code=503, detail="Service unavailable: Model not loaded")
+    
+    temp_file_path = None
+    
+    try:
+        # Download file from URL
+        max_size_bytes = request.max_file_size_mb * 1024 * 1024
+        temp_file_path, original_filename = download_file_from_url(str(request.url), max_size_bytes)
+        
+        # Determine file type
+        file_type = get_file_type(original_filename)
+        if file_type == "unknown":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported file format. Supported formats: {list(AUDIO_EXTENSIONS | VIDEO_EXTENSIONS)}"
+            )
+        
+        # Perform transcription
+        logger.info(f"Starting transcription for URL: {request.url} ({file_type})")
+        
+        result = model.transcribe(temp_file_path)
+        
+        logger.info(f"Transcription completed for URL: {request.url}")
+        
+        # Extract results
+        transcribed_text = result["text"].strip()
+        detected_language = result.get("language", "unknown")
+        
+        # Basic confidence estimation
+        confidence = None
+        if "segments" in result and result["segments"]:
+            confidences = [segment.get("avg_logprob", 0) for segment in result["segments"]]
+            if confidences:
+                confidence = sum(confidences) / len(confidences)
+        
+        return TranscriptionResponse(
+            text=transcribed_text,
+            language=detected_language,
+            confidence=confidence,
+            file_type=file_type,
+            source="url"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Transcription failed for URL {request.url}: {e}")
+        raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
+    finally:
+        # Clean up downloaded file
+        if temp_file_path and os.path.exists(temp_file_path):
+            try:
+                os.remove(temp_file_path)
+                logger.debug(f"Cleaned up downloaded file: {temp_file_path}")
+            except Exception as e:
+                logger.warning(f"Failed to clean up downloaded file {temp_file_path}: {e}")
+
+# Alternative endpoint with query parameter for simple URL transcription
+@app.post("/transcribe/from-url/", response_model=TranscriptionResponse)
+async def transcribe_from_url_simple(url: HttpUrl = Query(..., description="URL of the audio/video file to transcribe")):
+    """
+    Simple endpoint to transcribe from URL using query parameter.
+    
+    Args:
+        url: The URL of the audio/video file to transcribe
+        
+    Returns:
+        TranscriptionResponse containing the transcribed text
+    """
+    request = UrlTranscriptionRequest(url=url)
+    return await transcribe_from_url(request)
 
 # Utility endpoint to pre-download models
 @app.post("/admin/preload-model/")
