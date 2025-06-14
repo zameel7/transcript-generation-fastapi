@@ -58,14 +58,20 @@ async def startup_event():
     global model
     try:
         # Pre-ensure the model is cached (this is idempotent)
+        # Only download if not already cached to avoid memory issues
+        logger.info(f"Ensuring model '{WHISPER_MODEL}' is cached...")
         ensure_model_cached(WHISPER_MODEL, WHISPER_CACHE_DIR)
         
         # Load the model as recommended in the context
         # 'turbo' is optimized for speed with minimal accuracy degradation (~6 GB VRAM, ~8x relative speed)
         # Alternative options: 'base' (~1 GB VRAM), 'medium' (~5 GB VRAM), 'large' (~10 GB VRAM)
-        logger.info(f"Loading Whisper model '{WHISPER_MODEL}'...")
+        logger.info(f"Loading Whisper model '{WHISPER_MODEL}' into memory...")
         model = whisper.load_model(WHISPER_MODEL, download_root=WHISPER_CACHE_DIR)
         logger.info(f"Whisper model '{WHISPER_MODEL}' loaded successfully!")
+    except MemoryError as e:
+        logger.error(f"Not enough memory to load model '{WHISPER_MODEL}': {e}")
+        logger.error("Try using a smaller model like 'base' or increase Docker memory allocation")
+        raise e
     except Exception as e:
         logger.error(f"Failed to load Whisper model: {e}")
         # In production, you might want to exit gracefully or implement retry logic

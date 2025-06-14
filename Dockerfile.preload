@@ -1,5 +1,5 @@
-# Dockerfile for Whisper AI FastAPI Transcription Service
-# Supports both audio and video transcription with model pre-downloading
+# Dockerfile.preload - For systems with sufficient memory (8GB+ recommended)
+# This version pre-downloads models during build for zero startup delay
 
 FROM python:3.9-slim-buster
 
@@ -39,7 +39,7 @@ COPY --chown=app:app preload_models.py .
 COPY --chown=app:app extract_audio.py .
 
 # Configuration via build arguments and environment variables
-ARG WHISPER_MODEL=turbo
+ARG WHISPER_MODEL=base
 ARG WHISPER_CACHE_DIR=/home/app/.cache/whisper
 ENV WHISPER_MODEL=${WHISPER_MODEL}
 ENV WHISPER_CACHE_DIR=${WHISPER_CACHE_DIR}
@@ -47,11 +47,9 @@ ENV WHISPER_CACHE_DIR=${WHISPER_CACHE_DIR}
 # Create cache directory with proper permissions
 RUN mkdir -p ${WHISPER_CACHE_DIR}
 
-# Pre-download the Whisper model during build (optional but recommended)
-# This ensures the model is available immediately when the container starts
-# DISABLED BY DEFAULT due to potential memory issues during build
-# Uncomment the next line if you have sufficient build memory (8GB+ recommended)
-# RUN python preload_models.py --model ${WHISPER_MODEL} --cache-dir ${WHISPER_CACHE_DIR}
+# Pre-download the Whisper model during build
+# Use 'base' model by default as it's smaller and more build-friendly
+RUN python preload_models.py --model ${WHISPER_MODEL} --cache-dir ${WHISPER_CACHE_DIR}
 
 # Expose the port the app runs on
 EXPOSE 8000

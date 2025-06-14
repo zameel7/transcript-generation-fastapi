@@ -7,14 +7,14 @@ services:
       dockerfile: Dockerfile
       args:
         # Choose which model to pre-download during build
-        WHISPER_MODEL: turbo  # Options: tiny, base, small, medium, large, turbo
+        WHISPER_MODEL: base  # Options: tiny, base, small, medium, large, turbo
         WHISPER_CACHE_DIR: /app/cache
     container_name: whisper-transcription
     ports:
       - "8000:8000"
     environment:
       # Runtime configuration
-      WHISPER_MODEL: turbo
+      WHISPER_MODEL: base
       WHISPER_CACHE_DIR: /app/cache
     volumes:
       # Optional: persist model cache across container restarts
@@ -34,10 +34,10 @@ services:
         limits:
           # Adjust memory based on model size:
           # tiny/base: 2GB, small: 4GB, medium: 8GB, large/turbo: 12GB
-          memory: 8G
+          memory: 4G
           cpus: '2.0'
         reservations:
-          memory: 2G
+          memory: 1G
           cpus: '1.0'
 
   # Optional: Nginx reverse proxy for production
