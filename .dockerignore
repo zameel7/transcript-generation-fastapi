@@ -1,0 +1,63 @@
+# .dockerignore for Whisper AI FastAPI Transcription Service
+
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation
+README.md
+*.md
+docs/
+
+# Sample files and test data
+sample/
+*.mp3
+*.mp4
+*.wav
+*.avi
+*.mov
+
+# Logs
+*.log
+logs/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local development
+.env
+.env.local
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+
+# Temporary files
+tmp/
+temp/ 

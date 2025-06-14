@@ -6,11 +6,14 @@ A high-performance FastAPI service that provides audio transcription using OpenA
 
 - 🚀 Fast transcription using OpenAI Whisper AI
 - 🌍 Automatic language detection
-- 📁 Support for multiple audio formats
+- 📁 Support for multiple audio formats (MP3, WAV, M4A, FLAC, etc.)
+- 🎬 **Native video support** (MP4, AVI, MOV, MKV, etc.) - extracts audio automatically
 - 🔄 Asynchronous processing
-- 📊 Health checks and monitoring
+- 📊 Health checks and monitoring with model information
 - 🛡️ File size validation and error handling
 - 📝 Comprehensive logging
+- 💾 **Model pre-downloading and caching**
+- ⚙️ Environment-based configuration
 - 🐳 Docker support ready
 
 ## Prerequisites
@@ -84,19 +87,40 @@ The service will be available at:
 
 ### Health Check
 - **GET** `/` - Basic service status
-- **GET** `/health` - Detailed health check
+- **GET** `/health` - Detailed health check with model information
 
 ### Transcription
-- **POST** `/transcribe/` - Transcribe an audio file
+- **POST** `/transcribe/` - Transcribe an audio or video file (universal endpoint)
+- **POST** `/transcribe/audio/` - Legacy audio-only endpoint (redirects to main)
+- **POST** `/transcribe/video/` - Explicit video transcription endpoint
+
+### Administration
+- **POST** `/admin/preload-model/` - Pre-download and cache a model
 
 #### Example Usage
 
-Using curl:
+Using curl with audio:
 ```bash
 curl -X POST "http://localhost:8000/transcribe/" \
      -H "accept: application/json" \
      -H "Content-Type: multipart/form-data" \
-     -F "audio_file=@your_audio_file.mp3"
+     -F "media_file=@your_audio_file.mp3"
+```
+
+Using curl with video:
+```bash
+curl -X POST "http://localhost:8000/transcribe/" \
+     -H "accept: application/json" \
+     -H "Content-Type: multipart/form-data" \
+     -F "media_file=@your_video_file.mp4"
+```
+
+Using the explicit video endpoint:
+```bash
+curl -X POST "http://localhost:8000/transcribe/video/" \
+     -H "accept: application/json" \
+     -H "Content-Type: multipart/form-data" \
+     -F "video_file=@your_video_file.mp4"
 ```
 
 Using Python requests:
@@ -117,18 +141,51 @@ print(f"Detected language: {result['language']}")
 {
   "text": "Transcribed text content here...",
   "language": "en",
-  "confidence": -0.234
+  "confidence": -0.234,
+  "file_type": "video"
 }
 ```
 
 ## Configuration
 
 ### Model Selection
-You can change the Whisper model in `main.py`:
+You can change the Whisper model using environment variables or by modifying `main.py`:
+
+```bash
+# Using environment variables (recommended)
+export WHISPER_MODEL=base
+export WHISPER_CACHE_DIR=/path/to/custom/cache
+python main.py
+```
 
 ```python
-# In the startup_event function
-model = whisper.load_model("turbo")  # Options: tiny, base, small, medium, large, turbo
+# Or modify in main.py
+WHISPER_MODEL = "turbo"  # Options: tiny, base, small, medium, large, turbo
+```
+
+### Video Support
+The API now natively supports video files! Here's what you need to know:
+
+- **Automatic audio extraction**: Whisper automatically extracts audio from video files
+- **No preprocessing needed**: Upload video files directly to any transcription endpoint
+- **Supported formats**: MP4, AVI, MOV, MKV, WebM, M4V, 3GP, FLV, WMV
+- **Larger file limits**: Video files can be up to 500MB (vs 100MB for audio)
+
+### Model Pre-downloading
+To avoid downloading models on first startup, use the pre-loading utility:
+
+```bash
+# Pre-download the default turbo model
+python preload_models.py --model turbo
+
+# Pre-download a specific model to custom directory
+python preload_models.py --model base --cache-dir /app/models
+
+# Pre-download all models (warning: several GB!)
+python preload_models.py --all
+
+# Check what models are cached
+python preload_models.py --info
 ```
 
 ### Performance Considerations
@@ -158,7 +215,11 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY main.py .
+COPY main.py preload_models.py .
+
+# Pre-download the model during build (optional but recommended)
+ARG WHISPER_MODEL=turbo
+RUN python preload_models.py --model ${WHISPER_MODEL}
 
 # Expose port
 EXPOSE 8000
@@ -169,11 +230,21 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 ### 2. Build and run
 ```bash
-# Build Docker image
+# Build Docker image with default turbo model
 docker build -t whisper-transcription .
+
+# Build with a specific model
+docker build --build-arg WHISPER_MODEL=base -t whisper-transcription .
 
 # Run container
 docker run -p 8000:8000 whisper-transcription
+
+# Run with custom model and cache directory
+docker run -p 8000:8000 \
+  -e WHISPER_MODEL=medium \
+  -e WHISPER_CACHE_DIR=/app/cache \
+  -v $(pwd)/cache:/app/cache \
+  whisper-transcription
 ```
 
 ## Production Considerations

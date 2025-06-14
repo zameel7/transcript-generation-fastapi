@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  whisper-transcription:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Choose which model to pre-download during build
+        WHISPER_MODEL: turbo  # Options: tiny, base, small, medium, large, turbo
+        WHISPER_CACHE_DIR: /app/cache
+    container_name: whisper-transcription
+    ports:
+      - "8000:8000"
+    environment:
+      # Runtime configuration
+      WHISPER_MODEL: turbo
+      WHISPER_CACHE_DIR: /app/cache
+    volumes:
+      # Optional: persist model cache across container restarts
+      - whisper_cache:/app/cache
+      # Optional: mount local directory for sample files
+      - ./sample:/app/sample:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    # Resource limits (adjust based on your system and chosen model)
+    deploy:
+      resources:
+        limits:
+          # Adjust memory based on model size:
+          # tiny/base: 2GB, small: 4GB, medium: 8GB, large/turbo: 12GB
+          memory: 8G
+          cpus: '2.0'
+        reservations:
+          memory: 2G
+          cpus: '1.0'
+
+  # Optional: Nginx reverse proxy for production
+  nginx:
+    image: nginx:alpine
+    container_name: whisper-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      # Uncomment for SSL certificates
+      # - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      - whisper-transcription
+    restart: unless-stopped
+    profiles:
+      - production  # Only start with: docker-compose --profile production up
+
+volumes:
+  whisper_cache:
+    driver: local 
