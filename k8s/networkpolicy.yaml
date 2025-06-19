@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: whisper-transcription-netpol
+  namespace: transcription-service
+spec:
+  podSelector:
+    matchLabels:
+      app: whisper-transcription
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx  # Allow ingress controller
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring  # Allow monitoring (optional)
+    ports:
+    - protocol: TCP
+      port: 8000
+  egress:
+  - {}  # Allow all egress for downloading models and external requests 

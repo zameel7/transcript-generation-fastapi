@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: whisper-transcription-service
+  namespace: transcription-service
+  labels:
+    app: whisper-transcription
+spec:
+  selector:
+    app: whisper-transcription
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8000
+    protocol: TCP
+  type: ClusterIP 

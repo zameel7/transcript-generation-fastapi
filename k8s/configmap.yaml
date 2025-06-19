@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: whisper-config
+  namespace: transcription-service
+  labels:
+    app: whisper-transcription
+data:
+  WHISPER_MODEL: "turbo"
+  WHISPER_CACHE_DIR: "/app/cache"
+  PYTHONUNBUFFERED: "1"
+  PYTHONDONTWRITEBYTECODE: "1" 

@@ -1,0 +1,17 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: whisper-transcription
+spec:
+  replicas: 3
+  template:
+    spec:
+      containers:
+      - name: whisper-transcription
+        resources:
+          requests:
+            memory: "4Gi"
+            cpu: "2000m"
+          limits:
+            memory: "12Gi"
+            cpu: "6000m" 

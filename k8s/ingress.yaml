@@ -1,0 +1,31 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: whisper-transcription-ingress
+  namespace: transcription-service
+  labels:
+    app: whisper-transcription
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "500m"  # Allow large audio files
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"  # 5 minutes for transcription
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"  # Optional: for automatic SSL
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - transcription.yourdomain.com  # Replace with your domain
+    secretName: whisper-tls-secret
+  rules:
+  - host: transcription.yourdomain.com  # Replace with your domain
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: whisper-transcription-service
+            port:
+              number: 80 
