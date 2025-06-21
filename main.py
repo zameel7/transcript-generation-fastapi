@@ -331,35 +331,6 @@ async def transcribe_media(media_file: UploadFile = File(...)):
             except Exception as e:
                 logger.warning(f"Failed to clean up temporary file {temp_media_path}: {e}")
 
-# Legacy endpoint alias for backward compatibility
-@app.post("/transcribe/audio/", response_model=TranscriptionResponse)
-async def transcribe_audio_legacy(audio_file: UploadFile = File(...)):
-    """Legacy endpoint for audio-only transcription (redirects to main endpoint)."""
-    return await transcribe_media(audio_file)
-
-# New explicit video endpoint
-@app.post("/transcribe/video/", response_model=TranscriptionResponse)
-async def transcribe_video(video_file: UploadFile = File(...)):
-    """
-    Transcribes a video file by extracting and processing its audio track.
-    
-    Args:
-        video_file: The video file to transcribe
-        
-    Returns:
-        TranscriptionResponse containing the transcribed text from the video's audio
-    """
-    if not video_file.filename:
-        raise HTTPException(status_code=400, detail="No video file provided.")
-    
-    file_type = get_file_type(video_file.filename)
-    if file_type != "video":
-        raise HTTPException(
-            status_code=400,
-            detail=f"Expected video file. Supported video formats: {list(VIDEO_EXTENSIONS)}"
-        )
-    
-    return await transcribe_media(video_file)
 
 # URL-based transcription endpoints
 @app.post("/transcribe/url/", response_model=TranscriptionResponse)
@@ -461,15 +432,6 @@ async def preload_model(model_name: str = "turbo"):
             raise HTTPException(status_code=500, detail=f"Failed to cache model '{model_name}'")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error caching model: {str(e)}")
-
-# Additional endpoint for batch processing (future enhancement)
-@app.post("/transcribe/batch")
-async def transcribe_batch():
-    """
-    Placeholder for batch transcription endpoint.
-    This could be implemented for processing multiple files asynchronously.
-    """
-    raise HTTPException(status_code=501, detail="Batch transcription not yet implemented")
 
 if __name__ == "__main__":
     import uvicorn
